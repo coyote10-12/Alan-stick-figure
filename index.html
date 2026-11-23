@@ -109,17 +109,17 @@
   <div class="win" id="win-pc" style="left: 160px; top: 80px;">
     <div class="win-header"><span>💻 This PC</span><button class="win-close" onclick="closeWin('win-pc')">✕</button></div>
     <div class="win-body">
-      <b>Local Disk (C:)</b><br><br>
-      • <b>Grab & Toss:</b> Click and drag any stick figure by its head/shoulders.<br>
-      • <b>Platforms:</b> Drag windows around—stickmen jump onto titlebars and crates.<br>
-      • <b>Physics Crates:</b> Crates stack, carry stickmen, and bonk them when falling!
+      <b>Animator vs. Cursor Controls:</b><br><br>
+      • <b>Swat:</b> Whip your mouse into a stickman to knock it flying.<br>
+      • <b>Cursor Grab:</b> Hover near a stickman—it will jump up and latch onto your pointer! Shake your mouse fast to break free.<br>
+      • <b>Pick Up & Toss:</b> Click and hold any stickman to throw it.
     </div>
   </div>
 
   <div class="win" id="win-note" style="left: 460px; top: 160px;">
     <div class="win-header"><span>📝 Notepad.txt</span><button class="win-close" onclick="closeWin('win-note')">✕</button></div>
     <div class="win-body" style="padding:6px;">
-      <textarea class="notepad">Animator vs. Desktop — live on GitHub Pages!</textarea>
+      <textarea class="notepad">Watch your cursor—they fight back now!</textarea>
     </div>
   </div>
 
@@ -219,7 +219,7 @@
     const COLORS = ['#ff6b00', '#ef4444', '#3b82f6', '#22c55e', '#eab308'];
     const stickmen = [];
     let dragged = null;
-    let mouse = { x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0 };
+    let mouse = { x: -999, y: -999, vx: 0, vy: 0, px: -999, py: -999 };
 
     function resetDesktop() {
       const defaultPos = [
@@ -252,13 +252,19 @@
         this.timer = 60 + Math.random() * 120;
         this.walkPhase = Math.random() * 10;
         this.carriedBy = null;
+
+        // Cursor interaction states
+        this.grabbingCursor = false;
+        this.grabTimer = 0;
+        this.hitCooldown = 0;
+        this.angryTimer = 0;
       }
 
       getPlatforms() {
-        const plats = [{ left: 0, right: W, top: H - TASKBAR_H, ref: null }];
-        document.querySelectorAll('.win').forEach(w => {
-          if (w.style.display !== 'none') {
-            const r = w.getBoundingClientRect();
+const plats = [{ left: 0, right: W, top: H - TASKBAR_H, ref: null }];
+document.querySelectorAll('.win').forEach(w => {
+if (w.style.display !== 'none') {
+const r = w.getBoundingClientRect();
 plats.push({ left: r.left, right: r.right, top: r.top, ref: null });
 }
 });
@@ -268,14 +274,64 @@ plats.push({ left: c.x, right: c.x + c.size, top: c.y, ref: c });
 return plats;
 }
 update() {
-// Grabbed by head/neck (head is at y - 50)
+if (this.hitCooldown > 0) this.hitCooldown--;
+if (this.angryTimer > 0) this.angryTimer--;
+// 1. User is actively clicking & dragging the stickman
 if (dragged === this) {
+this.grabbingCursor = false;
 this.carriedBy = null;
 this.x = mouse.x;
 this.y = mouse.y + 46;
 this.vx = mouse.vx * 0.65;
 this.vy = mouse.vy * 0.65;
 return;
+}
+// 2. Stickman has latched onto the user's cursor!
+if (this.grabbingCursor) {
+this.carriedBy = null;
+this.grabTimer--;
+const mouseSpeed = Math.hypot(mouse.vx, mouse.vy);
+// Hands hold onto mouse.x, mouse.y (shoulders are ~40px above feet)
+this.x = mouse.x;
+this.y = Math.min(H - TASKBAR_H, mouse.y + 44);
+this.vx = mouse.vx * 0.8;
+this.vy = 0;
+// Shake mouse fast to fling the stickman off, or timer runs out
+if (mouseSpeed > 38) {
+this.grabbingCursor = false;
+this.hitCooldown = 35;
+this.vx = mouse.vx * 0.75;
+this.vy = Math.min(-4, mouse.vy * 0.6);
+return;
+}
+if (this.grabTimer <= 0) {
+this.grabbingCursor = false;
+this.hitCooldown = 45;
+this.vy = -5;
+}
+return;
+}
+// 3. Cursor proximity: swat bounce vs. grab attempt
+const bodyCenterY = this.y - 28;
+const distToCursor = Math.hypot(mouse.x - this.x, mouse.y - bodyCenterY);
+const cursorSpeed = Math.hypot(mouse.vx, mouse.vy);
+if (this.hitCooldown === 0 && distToCursor < 32) {
+if (cursorSpeed > 14) {
+// Fast cursor swats the stickman back!
+const pushDir = (this.x >= mouse.x) ? 1 : -1;
+this.vx = pushDir * Math.min(18, Math.max(8, cursorSpeed * 0.65));
+this.vy = -8 - Math.random() * 4;
+this.dir = -pushDir; // turns to face the cursor angrily
+this.hitCooldown = 22;
+this.angryTimer = 140; // chases/tries to grab cursor next
+this.carriedBy = null;
+} else if (distToCursor < 24 && Math.random() < (this.angryTimer > 0 ? 0.35 : 0.08)) {
+// Slow cursor gets grabbed by the stickman!
+this.grabbingCursor = true;
+this.grabTimer = 110 + Math.random() * 90;
+this.angryTimer = 0;
+return;
+}
 }
 // Carry stickman along if standing on a sliding crate
 if (this.carriedBy && crates.includes(this.carriedBy)) {
@@ -285,9 +341,13 @@ this.vy += 0.55;
 const prevY = this.y;
 this.x += this.vx;
 this.y += this.vy;
+// Air friction when knocked back
+if (this.hitCooldown > 0) {
+this.vx *= 0.96;
+}
 // Screen boundaries
-if (this.x < 16) { this.x = 16; this.vx = Math.abs(this.vx); this.dir = 1; }
-if (this.x > W - 16) { this.x = W - 16; this.vx = -Math.abs(this.vx); this.dir = -1; }
+if (this.x < 16) { this.x = 16; this.vx = Math.abs(this.vx) * 0.7; this.dir = 1; }
+if (this.x > W - 16) { this.x = W - 16; this.vx = -Math.abs(this.vx) * 0.7; this.dir = -1; }
 // Land on Taskbar, Windows, or Crates
 let grounded = false;
 this.carriedBy = null;
@@ -300,7 +360,20 @@ this.carriedBy = p.ref;
 break;
 }
 }
-// Kick crates on ground/side (ignore the crate currently stood upon)
+// Lunge/jump toward cursor if angry and cursor is within reach!
+if (grounded && this.angryTimer > 0 && this.hitCooldown === 0) {
+const dx = mouse.x - this.x;
+const dy = mouse.y - bodyCenterY;
+if (Math.abs(dx) < 220 && dy < 40 && dy > -140) {
+this.dir = dx >= 0 ? 1 : -1;
+this.vx = this.dir * 5.2;
+if (dy < -25 && Math.random() < 0.08) {
+this.vy = -12.5;
+this.state = 'jump';
+}
+}
+}
+// Kick crates on ground/side
 for (const c of crates) {
 if (c === this.carriedBy) continue;
 const cx = c.x + c.size / 2;
@@ -324,7 +397,7 @@ ico.style.top = ny + 'px';
 });
 // AI state machine
 this.timer--;
-if (this.timer <= 0 && grounded) {
+if (this.timer <= 0 && grounded && this.hitCooldown === 0) {
 const roll = Math.random();
 if (roll < 0.45) {
 this.state = 'walk';
@@ -343,9 +416,11 @@ this.vy = -11.5 - Math.random() * 3;
 this.timer = 45;
 }
 }
-if (grounded && this.state === 'walk') {
+if (grounded && this.state === 'walk' && this.hitCooldown === 0 && this.angryTimer === 0) {
 this.vx = this.dir * 2.2;
 this.walkPhase += 0.22;
+} else if (grounded && Math.abs(this.vx) > 0.5) {
+this.walkPhase += 0.28;
 } else if (!grounded) {
 this.walkPhase += 0.1;
 }
@@ -357,11 +432,11 @@ ctx.fillStyle = this.color;
 ctx.lineWidth = 3.5;
 ctx.lineCap = 'round';
 ctx.lineJoin = 'round';
-// Slight pendulum lag when dangling by the head/neck
-const lag = dragged === this ? Math.max(-14, Math.min(14, -this.vx * 0.9)) : 0;
+const isHeldOrGrabbing = (dragged === this || this.grabbingCursor);
+const lag = isHeldOrGrabbing ? Math.max(-14, Math.min(14, -this.vx * 0.9)) : 0;
 const headX = this.x;
 const headY = this.y - 50;
-const shoulderX = headX + (dragged === this ? lag * 0.3 : this.dir * 2);
+const shoulderX = headX + (isHeldOrGrabbing ? lag * 0.3 : this.dir * 2);
 const shoulderY = headY + 10;
 const hipX = headX + lag;
 const hipY = this.y - 22;
@@ -375,7 +450,7 @@ ctx.moveTo(shoulderX, shoulderY);
 ctx.lineTo(hipX, hipY);
 ctx.stroke();
 // Legs
-const swing = (dragged === this)
+const swing = isHeldOrGrabbing
 ? Math.sin(Date.now() * 0.025) * 10
 : Math.sin(this.walkPhase) * (Math.abs(this.vx) > 0.2 ? 10 : 1);
 ctx.beginPath();
@@ -385,13 +460,28 @@ ctx.moveTo(hipX, hipY);
 ctx.lineTo(hipX - swing, this.y);
 ctx.stroke();
 // Arms
-const armSwing = dragged === this ? -13 : -swing * 0.9;
 ctx.beginPath();
+if (this.grabbingCursor) {
+// Both hands reach straight up to hold the cursor pointer!
+ctx.moveTo(shoulderX, shoulderY + 2);
+ctx.lineTo(mouse.x - 3, mouse.y);
+ctx.moveTo(shoulderX, shoulderY + 2);
+ctx.lineTo(mouse.x + 3, mouse.y);
+} else {
+const armSwing = dragged === this ? -13 : -swing * 0.9;
 ctx.moveTo(shoulderX, shoulderY + 2);
 ctx.lineTo(shoulderX + armSwing, shoulderY + (dragged === this ? -8 : 14));
 ctx.moveTo(shoulderX, shoulderY + 2);
 ctx.lineTo(shoulderX - armSwing, shoulderY + (dragged === this ? -8 : 14));
+}
 ctx.stroke();
+// Visual grip ring around cursor when latched on
+if (this.grabbingCursor) {
+ctx.beginPath();
+ctx.arc(mouse.x, mouse.y, 10, 0, Math.PI * 2);
+ctx.lineWidth = 2;
+ctx.stroke();
+}
 ctx.restore();
 }
 }
@@ -401,6 +491,10 @@ stickmen.push(new Stickman(180 + Math.random() * (W - 360), 80, color));
 }
 // Mouse grab & throw
 window.addEventListener('mousemove', e => {
+if (mouse.px === -999) {
+mouse.px = e.clientX;
+mouse.py = e.clientY;
+}
 mouse.vx = e.clientX - mouse.px;
 mouse.vy = e.clientY - mouse.py;
 mouse.px = mouse.x = e.clientX;
@@ -412,8 +506,7 @@ toggleStart(false);
 }
 for (let i = stickmen.length - 1; i >= 0; i--) {
 const s = stickmen[i];
-// Hitbox covers head, torso, and legs; snaps grab to head/scruff
-if (Math.abs(e.clientX - s.x) < 24 && e.clientY >= s.y - 62 && e.clientY <= s.y + 6) {
+if (Math.abs(e.clientX - s.x) < 26 && e.clientY >= s.y - 62 && e.clientY <= s.y + 6) {
 dragged = s;
 break;
 }
@@ -430,15 +523,13 @@ c.vy += 0.5;
 c.x += c.vx;
 c.y += c.vy;
 c.vx *= 0.94;
-// Wall bounds
 if (c.x < 0) { c.x = 0; c.vx *= -0.6; }
 if (c.x + c.size > W) { c.x = W - c.size; c.vx *= -0.6; }
-// Taskbar floor
 if (c.y + c.size > H - TASKBAR_H) {
 c.y = H - TASKBAR_H - c.size;
 c.vy = 0;
 }
-// Crate-on-crate vertical stacking & horizontal push
+// Crate-on-crate stacking & horizontal push
 for (let j = 0; j < crates.length; j++) {
 if (i === j) continue;
 const o = crates[j];
@@ -455,7 +546,7 @@ o.x -= push;
 // Falling crate collision with stickmen
 if (c.vy > 1.5) {
 for (const s of stickmen) {
-if (dragged === s) continue;
+if (dragged === s || s.grabbingCursor) continue;
 const inX = s.x + 10 > c.x && s.x - 10 < c.x + c.size;
 const inY = s.y > c.y && s.y - 54 < c.y + c.size;
 if (inX && inY) {
@@ -471,6 +562,9 @@ c.vy *= 0.5;
 function loop() {
 ctx.clearRect(0, 0, W, H);
 updateCrates();
+// Decay mouse velocity smoothly if mouse stops moving
+mouse.vx *= 0.75;
+mouse.vy *= 0.75;
 for (const c of crates) {
 ctx.fillStyle = '#d97706';
 ctx.strokeStyle = '#78350f';
@@ -485,6 +579,6 @@ s.draw();
 requestAnimationFrame(loop);
 }
 loop();
-</script>
+    </script>
 </body>
 </html>
