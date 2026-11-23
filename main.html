@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desktop Stickman Simulator</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+    body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: radial-gradient(circle at 25% 25%, #3b9ad9 0%, #1b5fa7 55%, #0f2c54 100%);
+    }
+
+    /* Desktop Icons */
+    .icon {
+      position: absolute; width: 78px; text-align: center; color: #fff;
+      font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+      cursor: pointer; padding: 6px 4px; border-radius: 4px; z-index: 2;
+      transition: left 0.15s ease-out, top 0.15s ease-out;
+    }
+    .icon:hover { background: rgba(255,255,255,0.18); }
+    .icon-box {
+      width: 38px; height: 38px; margin: 0 auto 4px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+    }
+
+    /* Draggable Windows */
+    .win {
+      position: absolute; width: 330px; height: 220px;
+      background: #f3f3f3; border: 1px solid #1e40af;
+      border-radius: 6px 6px 0 0; box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+      display: flex; flex-direction: column; z-index: 5;
+    }
+    .win-header {
+      height: 30px; background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+      color: #fff; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 10px; font-size: 13px; font-weight: 600; cursor: move;
+      border-radius: 5px 5px 0 0;
+    }
+    .win-close {
+      background: #ef4444; border: none; color: #fff; width: 22px; height: 20px;
+      border-radius: 3px; cursor: pointer; font-weight: bold;
+    }
+    .win-close:hover { background: #dc2626; }
+    .win-body {
+      flex: 1; padding: 12px; font-size: 13px; color: #1e293b; overflow: auto;
+      background: #fff;
+    }
+    textarea.notepad {
+      width: 100%; height: 100%; border: none; outline: none; resize: none;
+      font-family: Consolas, monospace; font-size: 13px; user-select: text;
+    }
+
+    /* Start Menu */
+    #start-menu {
+      position: fixed; bottom: 44px; left: 8px; width: 230px;
+      background: rgba(20, 29, 46, 0.96); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+      padding: 8px; display: none; flex-direction: column; gap: 4px; z-index: 25;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .sm-item {
+      background: transparent; border: none; color: #fff; text-align: left;
+      padding: 8px 10px; border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    .sm-item:hover { background: rgba(59, 130, 246, 0.45); }
+
+    /* Taskbar */
+    #taskbar {
+      position: fixed; bottom: 0; left: 0; width: 100%; height: 42px;
+      background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(8px);
+      display: flex; align-items: center; padding: 0 10px; gap: 8px;
+      border-top: 1px solid rgba(255,255,255,0.15); z-index: 20;
+    }
+    .tb-btn {
+      background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      padding: 6px 11px; border-radius: 4px; font-size: 12px; cursor: pointer;
+    }
+    .tb-btn:hover { background: rgba(255,255,255,0.25); }
+    #start-btn { background: #2563eb; font-weight: bold; }
+    #clock { margin-left: auto; color: #e2e8f0; font-size: 12px; padding-right: 6px; }
+
+    /* Stickman Canvas Overlay */
+    #stage {
+      position: fixed; inset: 0; pointer-events: none; z-index: 15;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Desktop Icons -->
+  <div class="icon" style="left: 20px; top: 20px;" ondblclick="openWin('win-pc')">
+    <div class="icon-box">💻</div><div>This PC</div>
+  </div>
+  <div class="icon" style="left: 20px; top: 105px;" ondblclick="openWin('win-note')">
+    <div class="icon-box">📝</div><div>Notepad</div>
+  </div>
+  <div class="icon" style="left: 20px; top: 190px;" ondblclick="spawnStickman()">
+    <div class="icon-box">🧡</div><div>Spawn Friend</div>
+  </div>
+  <div class="icon" style="left: 20px; top: 275px;" ondblclick="dropBlock()">
+    <div class="icon-box">📦</div><div>Drop Crate</div>
+  </div>
+
+  <!-- Windows -->
+  <div class="win" id="win-pc" style="left: 160px; top: 80px;">
+    <div class="win-header"><span>💻 This PC</span><button class="win-close" onclick="closeWin('win-pc')">✕</button></div>
+    <div class="win-body">
+      <b>Local Disk (C:)</b><br><br>
+      • <b>Grab & Toss:</b> Click and drag any stick figure with your mouse.<br>
+      • <b>Platforms:</b> Drag windows around—stickmen can jump onto titlebars.<br>
+      • <b>Chaos:</b> Click <i>Drop Crate</i> or spawn multiple stickmen!
+    </div>
+  </div>
+
+  <div class="win" id="win-note" style="left: 460px; top: 160px;">
+    <div class="win-header"><span>📝 Notepad.txt</span><button class="win-close" onclick="closeWin('win-note')">✕</button></div>
+    <div class="win-body" style="padding:6px;">
+      <textarea class="notepad">Animator vs. Desktop — live on GitHub Pages!</textarea>
+    </div>
+  </div>
+
+  <!-- Start Menu -->
+  <div id="start-menu">
+    <button class="sm-item" onclick="openWin('win-pc'); toggleStart(false)">💻 Open This PC</button>
+    <button class="sm-item" onclick="openWin('win-note'); toggleStart(false)">📝 Open Notepad</button>
+    <button class="sm-item" onclick="spawnStickman(); toggleStart(false)">🧡 Spawn Stickman</button>
+    <button class="sm-item" onclick="dropBlock(); toggleStart(false)">📦 Drop Physics Crate</button>
+    <button class="sm-item" onclick="resetDesktop(); toggleStart(false)">↺ Reset Desktop</button>
+  </div>
+
+  <canvas id="stage"></canvas>
+
+  <!-- Taskbar -->
+  <div id="taskbar">
+    <button class="tb-btn" id="start-btn" onclick="toggleStart()">⊞ Start</button>
+    <button class="tb-btn" onclick="openWin('win-pc')">💻 This PC</button>
+    <button class="tb-btn" onclick="openWin('win-note')">📝 Notepad</button>
+    <button class="tb-btn" onclick="spawnStickman()">+ Stickman</button>
+    <button class="tb-btn" onclick="dropBlock()">+ Crate</button>
+    <button class="tb-btn" onclick="resetDesktop()">↺ Reset</button>
+    <div id="clock"></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const TASKBAR_H = 42;
+    let W = canvas.width = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    // Live Clock
+    function updateClock() {
+      document.getElementById('clock').textContent =
+        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Start Menu toggle
+    function toggleStart(force) {
+      const sm = document.getElementById('start-menu');
+      const show = typeof force === 'boolean' ? force : sm.style.display !== 'flex';
+      sm.style.display = show ? 'flex' : 'none';
+    }
+
+    // Window management
+    let topZ = 6;
+    function openWin(id) {
+      const el = document.getElementById(id);
+      el.style.display = 'flex';
+      el.style.zIndex = ++topZ;
+    }
+    function closeWin(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    document.querySelectorAll('.win').forEach(win => {
+      const header = win.querySelector('.win-header');
+      win.addEventListener('mousedown', () => win.style.zIndex = ++topZ);
+      header.addEventListener('mousedown', e => {
+        if (e.target.classList.contains('win-close')) return;
+        const startX = e.clientX - win.offsetLeft;
+        const startY = e.clientY - win.offsetTop;
+        const move = ev => {
+          win.style.left = Math.max(0, Math.min(W - win.offsetWidth, ev.clientX - startX)) + 'px';
+          win.style.top = Math.max(0, Math.min(H - TASKBAR_H - 30, ev.clientY - startY)) + 'px';
+        };
+        const up = () => {
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      });
+    });
+
+    // Physics Crates
+    const crates = [];
+    function dropBlock() {
+      crates.push({
+        x: 150 + Math.random() * (W - 300),
+        y: 40,
+        vx: (Math.random() - 0.5) * 4,
+        vy: 0,
+        size: 36
+      });
+    }
+
+    function resetDesktop() {
+      const defaultPos = [
+        { left: 20, top: 20 },
+        { left: 20, top: 105 },
+        { left: 20, top: 190 },
+        { left: 20, top: 275 }
+      ];
+      document.querySelectorAll('.icon').forEach((ico, i) => {
+        if (defaultPos[i]) {
+          ico.style.left = defaultPos[i].left + 'px';
+          ico.style.top = defaultPos[i].top + 'px';
+        }
+      });
+      crates.length = 0;
+      stickmen.length = 1;
+    }
+
+    // Stickman AI & Physics
+    const COLORS = ['#ff6b00', '#ef4444', '#3b82f6', '#22c55e', '#eab308'];
+    const stickmen = [];
+    let dragged = null;
+    let mouse = { x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0 };
+
+    class Stickman {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = 0;
+        this.color = color;
+        this.dir = 1;
+        this.state = 'walk';
+        this.timer = 60 + Math.random() * 120;
+        this.walkPhase = Math.random() * 10;
+      }
+
+      getPlatforms() {
+        const plats = [{ left: 0, right: W, top: H - TASKBAR_H }];
+        document.querySelectorAll('.win').forEach(w => {
+          if (w.style.display !== 'none') {
+            const r = w.getBoundingClientRect();
+            plats.push({ left: r.left, right: r.right, top: r.top });
+          }
+        });
+for (const c of crates) {
+plats.push({ left: c.x, right: c.x + c.size, top: c.y });
+}
+return plats;
+}
+update() {
+if (dragged === this) {
+this.x = mouse.x;
+this.y = mouse.y + 22;
+this.vx = mouse.vx * 0.65;
+this.vy = mouse.vy * 0.65;
+return;
+}
+this.vy += 0.55;
+const prevY = this.y;
+this.x += this.vx;
+this.y += this.vy;
+// Screen boundaries
+if (this.x < 16) { this.x = 16; this.vx = Math.abs(this.vx); this.dir = 1; }
+if (this.x > W - 16) { this.x = W - 16; this.vx = -Math.abs(this.vx); this.dir = -1; }
+// Land on Taskbar, Windows, or Crates
+let grounded = false;
+for (const p of this.getPlatforms()) {
+if (this.vy >= 0 && prevY <= p.top + 8 && this.y >= p.top && this.x >= p.left && this.x <= p.right) {
+this.y = p.top;
+this.vy = 0;
+grounded = true;
+break;
+}
+}
+// Kick crates
+for (const c of crates) {
+if (Math.hypot(this.x - (c.x + c.size / 2), (this.y - 20) - (c.y + c.size / 2)) < 32) {
+c.vx = this.dir * 5;
+c.vy = -4;
+}
+}
+// Knock desktop icons around
+document.querySelectorAll('.icon').forEach(ico => {
+const r = ico.getBoundingClientRect();
+const cx = r.left + r.width / 2;
+const cy = r.top + r.height / 2;
+if (Math.hypot(this.x - cx, (this.y - 25) - cy) < 34 && Math.random() < 0.08) {
+const nx = Math.max(0, Math.min(W - 78, r.left + this.dir * 40));
+const ny = Math.max(0, Math.min(H - TASKBAR_H - 70, r.top - 16));
+ico.style.left = nx + 'px';
+ico.style.top = ny + 'px';
+}
+});
+// AI state machine
+this.timer--;
+if (this.timer <= 0 && grounded) {
+const roll = Math.random();
+if (roll < 0.45) {
+this.state = 'walk';
+this.dir = Math.random() < 0.5 ? -1 : 1;
+this.vx = this.dir * (2 + Math.random() * 1.5);
+this.timer = 70 + Math.random() * 110;
+} else if (roll < 0.72) {
+this.state = 'idle';
+this.vx = 0;
+this.timer = 40 + Math.random() * 70;
+} else {
+this.state = 'jump';
+this.dir = Math.random() < 0.5 ? -1 : 1;
+this.vx = this.dir * 3.8;
+this.vy = -11.5 - Math.random() * 3;
+this.timer = 45;
+}
+}
+if (grounded && this.state === 'walk') {
+this.vx = this.dir * 2.2;
+this.walkPhase += 0.22;
+} else if (!grounded) {
+this.walkPhase += 0.1;
+}
+}
+draw() {
+ctx.save();
+ctx.strokeStyle = this.color;
+ctx.fillStyle = this.color;
+ctx.lineWidth = 3.5;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+const hipX = this.x;
+const hipY = this.y - 22;
+const shoulderX = hipX + (dragged === this ? -this.vx * 0.4 : this.dir * 2);
+const shoulderY = hipY - 18;
+const headY = shoulderY - 10;
+// Head
+ctx.beginPath();
+ctx.arc(shoulderX, headY, 7.5, 0, Math.PI * 2);
+ctx.fill();
+// Torso
+ctx.beginPath();
+ctx.moveTo(shoulderX, shoulderY);
+ctx.lineTo(hipX, hipY);
+ctx.stroke();
+// Legs
+const swing = (dragged === this)
+? Math.sin(Date.now() * 0.025) * 11
+: Math.sin(this.walkPhase) * (Math.abs(this.vx) > 0.2 ? 10 : 1);
+ctx.beginPath();
+ctx.moveTo(hipX, hipY);
+ctx.lineTo(hipX + swing, this.y);
+ctx.moveTo(hipX, hipY);
+ctx.lineTo(hipX - swing, this.y);
+ctx.stroke();
+// Arms
+const armSwing = dragged === this ? -14 : -swing * 0.9;
+ctx.beginPath();
+ctx.moveTo(shoulderX, shoulderY + 2);
+ctx.lineTo(shoulderX + armSwing, shoulderY + (dragged === this ? -10 : 14));
+ctx.moveTo(shoulderX, shoulderY + 2);
+ctx.lineTo(shoulderX - armSwing, shoulderY + (dragged === this ? -10 : 14));
+ctx.stroke();
+ctx.restore();
+}
+}
+function spawnStickman() {
+const color = COLORS[stickmen.length % COLORS.length];
+stickmen.push(new Stickman(180 + Math.random() * (W - 360), 80, color));
+}
+// Mouse grab & throw
+window.addEventListener('mousemove', e => {
+mouse.vx = e.clientX - mouse.px;
+mouse.vy = e.clientY - mouse.py;
+mouse.px = mouse.x = e.clientX;
+mouse.py = mouse.y = e.clientY;
+});
+window.addEventListener('mousedown', e => {
+if (!e.target.closest('#start-menu') && !e.target.closest('#start-btn')) {
+toggleStart(false);
+}
+for (let i = stickmen.length - 1; i >= 0; i--) {
+const s = stickmen[i];
+if (Math.hypot(e.clientX - s.x, e.clientY - (s.y - 28)) < 34) {
+dragged = s;
+break;
+}
+}
+});
+window.addEventListener('mouseup', () => { dragged = null; });
+// Start with The Second Coming (Orange)
+spawnStickman();
+function loop() {
+ctx.clearRect(0, 0, W, H);
+// Update & draw crates
+for (const c of crates) {
+c.vy += 0.5;
+c.x += c.vx;
+c.y += c.vy;
+c.vx *= 0.96;
+if (c.x < 0) { c.x = 0; c.vx *= -0.6; }
+if (c.x + c.size > W) { c.x = W - c.size; c.vx *= -0.6; }
+if (c.y + c.size > H - TASKBAR_H) {
+c.y = H - TASKBAR_H - c.size;
+c.vy = 0;
+}
+ctx.fillStyle = '#d97706';
+ctx.strokeStyle = '#78350f';
+ctx.lineWidth = 2;
+ctx.fillRect(c.x, c.y, c.size, c.size);
+ctx.strokeRect(c.x, c.y, c.size, c.size);
+}
+for (const s of stickmen) {
+s.update();
+s.draw();
+}
+requestAnimationFrame(loop);
+}
+loop();
+
+
+
+### Quick GitHub Pages Setup
+1. Create a new repository on [GitHub](https://github.com) (for example, `desktop-stickman`).
+2. Click **Add file → Create new file**, name it **`index.html`**, paste the entire code above, and click **Commit changes**.
+3. Go to your repository's **Settings → Pages**.
+4. Under **Build and deployment → Branch**, choose **`main`** and **`/ (root)`**, then click **Save**.
+5. Wait ~30–60 seconds and refresh the Pages screen to get your live URL (`https://<your-username>.github.io/desktop-stickman/`).
+
+<FollowUp>
+Want me to split this into **separate `index.html`, `style.css`, and `script.js` files** for a cleaner repo structure, or add **stickman-vs-stickman sparring**?
+</FollowUp>
